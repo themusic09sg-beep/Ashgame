@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KentishDad's Lorry vs music09</title>
+<style>
+:root{--bg:#e9efe3;--ink:#1d2a1a;--card:#fffdf5;--accent:#c8321f;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#11160f;--ink:#e8f0df;--card:#1b2418;--accent:#ff6a4d}}
+:root[data-theme="dark"]{--bg:#11160f;--ink:#e8f0df;--card:#1b2418;--accent:#ff6a4d}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:"Trebuchet MS",Verdana,sans-serif;overflow:hidden;touch-action:none;user-select:none}
+#wrap{position:relative;height:100%;display:flex;align-items:center;justify-content:center}
+canvas{height:100%;max-width:100%;aspect-ratio:9/16;background:#2b2f36;display:block}
+#hud{position:absolute;top:calc(env(safe-area-inset-top,0px) + 8px);left:0;right:0;display:flex;justify-content:center;gap:18px;font-weight:700;font-size:15px;pointer-events:none;color:#fff;text-shadow:0 1px 3px #000}
+.ov{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:20px}
+.card{background:var(--card);color:var(--ink);border:3px solid var(--ink);border-radius:14px;padding:20px;max-width:320px;text-align:center}
+h1{margin:0 0 8px;font-size:24px;line-height:1.1}
+p{margin:6px 0;font-size:15px;line-height:1.35}
+button{margin-top:12px;font:inherit;font-weight:700;font-size:17px;padding:10px 22px;border:3px solid var(--ink);border-radius:10px;background:var(--accent);color:#fff;cursor:pointer}
+button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.hide{display:none}
+#horn{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);left:50%;transform:translateX(-50%);margin:0;min-width:110px}
+#horn:disabled{opacity:.6}
+</style>
+</head>
+<body>
+<div id="wrap">
+<canvas id="c" width="360" height="640"></canvas>
+<div id="hud"><span id="sc">0 m</span><span id="bs">Best 0 m</span></div>
+<button id="horn">HONK</button>
+<div id="start" class="ov"><div class="card"><h1>KentishDad's Lorry</h1><p>You’re Ash, driving the lorry. music09 is chasing you in a slightly faster lorry and wants to rear-end you. Switch lanes to dodge him, or hit HONK to scare him off.</p><p>Tap left/right, swipe, or use the arrow keys.</p><button id="go">Start the engine</button></div></div>
+<div id="over" class="ov hide"><div class="card"><h1 id="ot">Crunch!</h1><p id="om"></p><p id="os"></p><button id="re">Go again</button></div></div>
+</div>
+<script>
+(function(){
+var cv=document.getElementById('c'),x=cv.getContext('2d'),W=360,H=640,LW=W/3;
+var scEl=document.getElementById('sc'),bsEl=document.getElementById('bs');
+var best=0;try{best=+localStorage.getItem('kd_best')||0}catch(e){}
+bsEl.textContent='Best '+best+' m';
+var msgs=["music09 rear-ended Ash. Check your mirrors.","That's the third trailer this week. Insurance won't be thrilled.","Somewhere in Kent, a dad sighs.","He did indicate. In the wrong key.","The lorry is fine. The vibe is not.","Should've gone for the services at Maidstone."];
+var pvx=0,lane,px,en,dist,speed,dead,run,t,spawnT,lines,shake;
+function reset(){lane=1;hornCd=0;honk=0;px=LW*1.5;pvx=0;en=[];dist=0;speed=4;dead=false;run=true;t=0;spawnT=40;lines=0;shake=0}
+function spawn(){
+  var a=Math.floor(Math.random()*3);
+  en.push({l:a,x:LW*(a+.5),y:H+60,sw:true,warn:0,done:false,cd:40});
+  
+}
+var ac=null,hornCd=0,honk=0,hornEl=document.getElementById('horn');
+function beep(f,s,d){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();var o=ac.createOscillator(),g=ac.createGain();o.type='sawtooth';o.frequency.value=f;g.gain.value=.08;o.connect(g);g.connect(ac.destination);o.start(ac.currentTime+s);o.stop(ac.currentTime+s+d)}catch(er){}}
+function horn(){
+  if(!run||dead||hornCd>0)return;
+  beep(311,0,.35);beep(370,0,.35);beep(311,.4,.5);beep(370,.4,.5);
+  hornCd=180;honk=40;
+  for(var i=0;i<en.length;i++){var e=en[i];if(e.y<640&&e.y>380){e.cd=150;e.sig=0;if(e.l===lane)e.l=(lane+1+Math.floor(Math.random()*2))%3;e.y+=100}}
+}
+hornEl.addEventListener('pointerdown',function(ev){ev.stopPropagation();horn()});
+function move(d){if(!run||dead)return;lane=Math.max(0,Math.min(2,lane+d))}
+document.addEventListener('keydown',function(e){
+  if(e.key==='ArrowLeft'||e.key==='a')move(-1);
+  if(e.key==='ArrowRight'||e.key==='d')move(1);
+  if(e.key==='Enter'&&dead)begin();
+  if(e.key==='h'||e.key===' ')horn();
+});
+var sx=null;
+cv.addEventListener('pointerdown',function(e){sx=e.clientX;
+  var r=cv.getBoundingClientRect();move(e.clientX<r.left+r.width/2?-1:1)});
+cv.addEventListener('pointermove',function(e){
+  if(sx!==null&&Math.abs(e.clientX-sx)>50){move(e.clientX>sx?1:-1);sx=e.clientX}});
+window.addEventListener('pointerup',function(){sx=null});
+function roundRect(a,b,w,h,r,c){x.fillStyle=c;x.beginPath();x.roundRect?x.roundRect(a,b,w,h,r):x.rect(a,b,w,h);x.fill()}
+function drawLorry(cx,cy){
+  roundRect(cx-24,cy-10,48,92,4,'#f4f1e8');
+  x.fillStyle='#1d2a1a';x.font='bold 9px Trebuchet MS,Verdana,sans-serif';x.textAlign='center';
+  x.save();x.translate(cx,cy+36);x.rotate(-Math.PI/2);x.fillText('KENTISHDAD',0,3);x.restore();
+  roundRect(cx-22,cy-44,44,36,6,'#c8321f');
+  roundRect(cx-17,cy-40,34,12,3,'#9fd3ee');
+  roundRect(cx-27,cy-30,5,10,2,'#111');roundRect(cx+22,cy-30,5,10,2,'#111');
+  roundRect(cx-27,cy+54,5,16,2,'#111');roundRect(cx+22,cy+54,5,16,2,'#111');
+}
+function drawMusic(e){
+  roundRect(e.x-22,e.y-30,44,60,6,'#f28c1b');roundRect(e.x-27,e.y-20,5,12,2,'#111');roundRect(e.x+22,e.y-20,5,12,2,'#111');roundRect(e.x-27,e.y+12,5,12,2,'#111');roundRect(e.x+22,e.y+12,5,12,2,'#111');
+  roundRect(e.x-17,e.y-26,34,14,3,'#9fd3ee');if(e.sig&&Math.floor(t/5)%2===0){var sd=e.nl>e.l?1:-1;x.fillStyle='#ffb000';x.fillRect(e.x+sd*24-3,e.y-30,6,6);x.fillRect(e.x+sd*24-3,e.y+24,6,6)}
+  roundRect(e.x-17,e.y+4,34,20,3,'#c96d0c');
+  x.fillStyle='#fff';x.textAlign='center';x.font='bold 18px sans-serif';x.fillText('\u266A',e.x,e.y+6);
+  x.font='bold 9px Trebuchet MS,Verdana,sans-serif';x.fillStyle='#ffe66d';x.fillText('music09',e.x,e.y-36);
+  if(e.l===lane&&e.y<600&&e.y>400&&Math.floor(t/6)%2===0){x.fillStyle='#ff4d4d';x.font='bold 22px sans-serif';x.fillText('!',e.x,e.y-52)}
+}
+function step(){
+  if(run&&!dead){
+    t++;if(hornCd>0)hornCd--;if(honk>0)honk--;dist+=speed/10;speed=Math.min(11,4+dist/220);lines=(lines+speed)%80;
+    pvx+=(Math.max(-2.6,Math.min(2.6,(LW*(lane+.5)-px)*.08))-pvx)*.1;px+=pvx;
+    if(!en.length&&--spawnT<=0){spawn();spawnT=90}
+    for(var i=en.length-1;i>=0;i--){
+      var e=en[i];e.y-=.9+Math.min(1.4,dist/600);
+      if(e.sw&&e.y>440){e.cd=(e.cd||0)-1;
+        if(e.cd<=0&&e.l!==lane&&!e.sig){e.sig=30;e.nl=lane}
+      if(e.sig&&--e.sig===0){e.l=e.nl;e.cd=90}}
+      var tx=LW*(e.l+.5);e.vx=e.vx||0;e.vx+=(Math.max(-1.5,Math.min(1.5,(tx-e.x)*.05))-e.vx)*.06;e.x+=e.vx;
+      if(Math.abs(e.x-px)<34&&e.y+30>300-44&&e.y-30<300+82){crash();}
+      if(e.y<-80)en.splice(i,1);
+    }
+    scEl.textContent=Math.floor(dist)+' m';hornEl.textContent=hornCd>0?'Wait '+Math.ceil(hornCd/60)+'s':'HONK';hornEl.disabled=hornCd>0;
+  }
+  draw();requestAnimationFrame(step);
+}
+function crash(){
+  dead=true;shake=14;
+  var d=Math.floor(dist);
+  if(d>best){best=d;try{localStorage.setItem('kd_best',best)}catch(e){}}
+  bsEl.textContent='Best '+best+' m';
+  document.getElementById('om').textContent=msgs[Math.floor(Math.random()*msgs.length)];
+  document.getElementById('os').textContent=d+' m survived'+(d>=best&&d>0?' \u2013 new best!':'');
+  document.getElementById('over').classList.remove('hide');
+}
+function draw(){
+  x.save();
+  if(shake>0){x.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);shake--}
+  x.fillStyle='#2b2f36';x.fillRect(0,0,W,H);
+  x.fillStyle='#3f6b3a';x.fillRect(0,0,6,H);x.fillRect(W-6,0,6,H);
+  x.fillStyle='#e8e4d0';
+  for(var l=1;l<3;l++)for(var y=-80+lines;y<H;y+=80)x.fillRect(LW*l-2,y,4,40);
+  for(var i=0;i<en.length;i++){var m=en[i];x.save();x.translate(m.x,m.y);x.rotate((m.vx||0)*.07);x.translate(-m.x,-m.y);drawMusic(m);x.restore()}
+  x.save();x.translate(px,320);x.rotate(pvx*.05);x.translate(-px,-320);drawLorry(px,300);x.restore();if(honk>0){x.fillStyle='#ffe66d';x.textAlign='center';x.font='bold 22px Trebuchet MS,Verdana,sans-serif';x.fillText('HONK! HONK!',px,236-(40-honk)*.5)}
+  x.restore();
+}
+function begin(){document.getElementById('start').classList.add('hide');document.getElementById('over').classList.add('hide');reset()}
+document.getElementById('go').onclick=begin;
+document.getElementById('re').onclick=begin;
+reset();run=false;requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>
