@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KentishDad's Lorry vs music09</title>
+<style>
+:root{--bg:#e9efe3;--ink:#1d2a1a;--card:#fffdf5;--accent:#c8321f;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#11160f;--ink:#e8f0df;--card:#1b2418;--accent:#ff6a4d}}
+:root[data-theme="dark"]{--bg:#11160f;--ink:#e8f0df;--card:#1b2418;--accent:#ff6a4d}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:"Trebuchet MS",Verdana,sans-serif;overflow:hidden;touch-action:none;user-select:none}
+#wrap{position:relative;height:100%;display:flex;align-items:center;justify-content:center}
+canvas{height:100%;max-width:100%;aspect-ratio:9/16;background:#2b2f36;display:block}
+#hud{position:absolute;top:calc(env(safe-area-inset-top,0px) + 8px);left:0;right:0;display:flex;justify-content:center;gap:18px;font-weight:700;font-size:15px;pointer-events:none;color:#fff;text-shadow:0 1px 3px #000}
+.ov{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:20px}
+.card{background:var(--card);color:var(--ink);border:3px solid var(--ink);border-radius:14px;padding:20px;max-width:320px;text-align:center}
+h1{margin:0 0 8px;font-size:24px;line-height:1.1}
+p{margin:6px 0;font-size:15px;line-height:1.35}
+button{margin-top:12px;font:inherit;font-weight:700;font-size:17px;padding:10px 22px;border:3px solid var(--ink);border-radius:10px;background:var(--accent);color:#fff;cursor:pointer}
+button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.hide{display:none}
+#horn{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);left:50%;transform:translateX(-50%);margin:0;min-width:110px}
+#horn:disabled{opacity:.6}
+.m{font-size:14px;padding:6px 12px;margin:4px 2px 0;background:var(--card);color:var(--ink)}
+.m.on{background:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div id="wrap">
+<canvas id="c" width="360" height="640"></canvas>
+<div id="hud"><span id="sc">0 m</span><span id="bs">Best 0 m</span></div>
+<button id="horn">HONK</button>
+<div id="start" class="ov"><div class="card"><h1>KentishDad's Lorry</h1><p>You’re Ash, driving the lorry. music09 is chasing you in a slightly faster lorry and wants to rear-end you. Switch lanes to dodge him, or hit HONK to scare him off. Traffic can be switched off below.</p><p>Tap left/right, swipe, or use the arrow keys.</p><p><b>Difficulty</b></p><div id="modes"><button class="m" data-m="easy">Easy</button><button class="m" data-m="medium">Medium</button><button class="m" data-m="hard">Hard</button></div><p id="desc" style="min-height:4em"></p><button id="nt" class="m">Traffic: On</button><button id="go">Start the engine</button></div></div>
+<div id="over" class="ov hide"><div class="card"><h1 id="ot">Crunch!</h1><p id="om"></p><p id="os"></p><button id="re">Go again</button><br><button id="menu" class="m">Change difficulty</button></div></div>
+</div>
+<script>
+(function(){
+var cv=document.getElementById('c'),x=cv.getContext('2d'),W=360,H=640,LW=W/3;
+var scEl=document.getElementById('sc'),bsEl=document.getElementById('bs');
+var best=0;function tag(){return mode+(nt?' (no traffic)':'')}function loadBest(){best=0;try{best=+localStorage.getItem('kd_best_'+mode+nt)||0}catch(e){}bsEl.textContent='Best '+best+' m · '+tag()}
+var msgs=["music09 rear-ended Ash. Check your mirrors.","That's the third trailer this week. Insurance won't be thrilled.","Somewhere in Kent, a dad sighs.","He did indicate. In the wrong key.","The lorry is fine. The vibe is not.","Should've gone for the services at Maidstone."];
+var nt=false,mode='medium',D={easy:{d:"Very relaxed. music09 is slow and clumsy, signals long before he moves and crashes into traffic a lot. Light traffic.",look:150,ms:.45,mg:.45,ts:1.7,sig:60,hc:90,lat:.9,rc:180},medium:{d:"The standard drive. music09 closes in steadily and the traffic is busier.",look:330,ms:.9,mg:1.4,ts:1,sig:30,hc:180,lat:1.5,rc:90},hard:{d:"Everything, but harder. Fast music09, dense traffic, barely any warning and a long horn cooldown.",look:440,ms:1.5,mg:2.2,ts:.65,sig:14,hc:360,lat:2.4,rc:45}},fx=[],tr=[],tSpawn=0,TC=['#2f80ed','#27ae60','#eb5757','#f2c94c','#9b51e0','#e0e0e0'],TM=["Ash didn't see the Fiesta. Mirrors, signal, manoeuvre!","Traffic on the M20, who'd have thought.","That was somebody's Sunday drive.","Ash found out the slow lane is full."],pvx=0,lane,px,en,dist,speed,dead,run,t,spawnT,lines,shake;
+function reset(){lane=1;hornCd=0;honk=0;px=LW*1.5;pvx=0;en=[];tr=[];fx=[];tSpawn=60;dist=0;speed=4;dead=false;run=true;t=0;spawnT=40;lines=0;shake=0}
+function blk(l,ey,look){for(var a=0;a<tr.length;a++){var c=tr[a];if(Math.abs(c.x-LW*(l+.5))<5&&c.y<ey+60&&c.y>ey-look)return true}return false}
+function spawn(){
+  var a=Math.floor(Math.random()*3);
+  en.push({l:a,x:LW*(a+.5),y:H+60,sw:true,warn:0,done:false,cd:40});
+  
+}
+var ac=null,hornCd=0,honk=0,hornEl=document.getElementById('horn');
+function beep(f,s,d){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();var o=ac.createOscillator(),g=ac.createGain();o.type='sawtooth';o.frequency.value=f;g.gain.value=.08;o.connect(g);g.connect(ac.destination);o.start(ac.currentTime+s);o.stop(ac.currentTime+s+d)}catch(er){}}
+function horn(){
+  if(!run||dead||hornCd>0)return;
+  beep(311,0,.35);beep(370,0,.35);beep(311,.4,.5);beep(370,.4,.5);
+  hornCd=D[mode].hc;honk=40;
+  for(var i=0;i<en.length;i++){var e=en[i];if(e.y<640&&e.y>380){e.cd=150;e.sig=0;if(e.l===lane)e.l=(lane+1+Math.floor(Math.random()*2))%3;e.y+=100}}
+}
+hornEl.addEventListener('pointerdown',function(ev){ev.stopPropagation();horn()});
+function move(d){if(!run||dead)return;lane=Math.max(0,Math.min(2,lane+d))}
+document.addEventListener('keydown',function(e){
+  if(e.key==='ArrowLeft'||e.key==='a')move(-1);
+  if(e.key==='ArrowRight'||e.key==='d')move(1);
+  if(e.key==='Enter'&&dead)begin();
+  if(e.key==='h'||e.key===' ')horn();
+});
+var sx=null;
+cv.addEventListener('pointerdown',function(e){sx=e.clientX;
+  var r=cv.getBoundingClientRect();move(e.clientX<r.left+r.width/2?-1:1)});
+cv.addEventListener('pointermove',function(e){
+  if(sx!==null&&Math.abs(e.clientX-sx)>50){move(e.clientX>sx?1:-1);sx=e.clientX}});
+window.addEventListener('pointerup',function(){sx=null});
+function roundRect(a,b,w,h,r,c){x.fillStyle=c;x.beginPath();x.roundRect?x.roundRect(a,b,w,h,r):x.rect(a,b,w,h);x.fill()}
+function drawLorry(cx,cy){
+  roundRect(cx-24,cy-10,48,92,4,'#f4f1e8');
+  x.fillStyle='#1d2a1a';x.font='bold 9px Trebuchet MS,Verdana,sans-serif';x.textAlign='center';
+  x.save();x.translate(cx,cy+36);x.rotate(-Math.PI/2);x.fillText('KENTISHDAD',0,3);x.restore();
+  roundRect(cx-22,cy-44,44,36,6,'#c8321f');
+  roundRect(cx-17,cy-40,34,12,3,'#9fd3ee');
+  roundRect(cx-27,cy-30,5,10,2,'#111');roundRect(cx+22,cy-30,5,10,2,'#111');
+  roundRect(cx-27,cy+54,5,16,2,'#111');roundRect(cx+22,cy+54,5,16,2,'#111');
+}
+function drawMusic(e){
+  roundRect(e.x-21,e.y+26,42,90,3,'#555b66');roundRect(e.x-26,e.y+84,5,16,2,'#111');roundRect(e.x+21,e.y+84,5,16,2,'#111');roundRect(e.x-17,e.y+32,34,36,3,'#1c1c24');roundRect(e.x-17,e.y+72,34,36,3,'#2a2a36');x.fillStyle='#8a8a99';x.beginPath();x.arc(e.x,e.y+50,10,0,7);x.fill();x.beginPath();x.arc(e.x,e.y+90,10,0,7);x.fill();roundRect(e.x-19,e.y+68,38,3,1,'#f28c1b');roundRect(e.x-12,e.y+112,7,4,1,'#ff3b3b');roundRect(e.x+5,e.y+112,7,4,1,'#ff3b3b');
+  roundRect(e.x-22,e.y-30,44,60,6,'#f28c1b');roundRect(e.x-27,e.y-20,5,12,2,'#111');roundRect(e.x+22,e.y-20,5,12,2,'#111');roundRect(e.x-27,e.y+12,5,12,2,'#111');roundRect(e.x+22,e.y+12,5,12,2,'#111');
+  roundRect(e.x-17,e.y-26,34,14,3,'#9fd3ee');if(e.sig&&Math.floor(t/5)%2===0){var sd=e.nl>e.l?1:-1;x.fillStyle='#ffb000';x.fillRect(e.x+sd*24-3,e.y-30,6,6);x.fillRect(e.x+sd*24-3,e.y+24,6,6)}
+  roundRect(e.x-17,e.y+4,34,20,3,'#c96d0c');
+  x.fillStyle='#fff';x.textAlign='center';x.font='bold 18px sans-serif';x.fillText('\u266A',e.x,e.y+6);
+  x.font='bold 9px Trebuchet MS,Verdana,sans-serif';x.fillStyle='#ffe66d';x.fillText('music09',e.x,e.y-36);
+  if(e.l===lane&&e.y<600&&e.y>400&&Math.floor(t/6)%2===0){x.fillStyle='#ff4d4d';x.font='bold 22px sans-serif';x.fillText('!',e.x,e.y-52)}
+}
+function step(){
+  if(run&&!dead){
+    t++;if(hornCd>0)hornCd--;if(honk>0)honk--;dist+=speed/10;speed=Math.min(11,4+dist/220);lines=(lines+speed)%80;
+    pvx+=(Math.max(-2.6,Math.min(2.6,(LW*(lane+.5)-px)*.08))-pvx)*.1;px+=pvx;
+    if(!en.length&&--spawnT<=0){spawn();spawnT=90}
+    if(!nt&&--tSpawn<=0){var tl=Math.floor(Math.random()*3);tr.push({x:LW*(tl+.5),y:-60,c:TC[Math.floor(Math.random()*TC.length)]});tSpawn=(Math.max(70,130-dist/12)+Math.random()*40)*D[mode].ts}
+    var trv=1.4+speed*.15;
+    for(var j=tr.length-1;j>=0;j--){var q=tr[j];q.y+=trv;
+      if(Math.abs(q.x-px)<30&&q.y+28>256&&q.y-28<382){crash(TM[Math.floor(Math.random()*TM.length)])}
+      var gone=false;for(var n=0;n<en.length&&!gone;n++){var u=en[n];if(Math.abs(q.x-u.x)<30&&Math.abs(q.y-u.y)<56){u.stun=150;u.y+=30;u.cd=200;u.sig=0;dist+=30;fx.push({x:q.x,y:q.y,t:50});gone=true}}
+      if(gone||q.y>H+80)tr.splice(j,1)}
+    for(var i=en.length-1;i>=0;i--){
+      var e=en[i];if(e.stun>0){e.stun--;e.y+=1.1}else{e.y-=(D[mode].ms+Math.min(D[mode].mg,dist/600))*(blk(e.l,e.y,D[mode].look*.5)?.35:1)}
+      if(!e.sig&&!(e.stun>0)&&blk(e.l,e.y,D[mode].look)){var al=[0,1,2].filter(function(l){return l!==e.l&&!blk(l,e.y,D[mode].look)});if(al.length){al.sort(function(a,b){return Math.abs(a-lane)-Math.abs(b-lane)});e.sig=Math.max(8,Math.round(D[mode].sig*.5));e.nl=al[0]}}
+      if(e.sw&&e.y>440){e.cd=(e.cd||0)-1;
+        if(e.cd<=0&&e.l!==lane&&!e.sig&&!blk(lane,e.y,D[mode].look)){e.sig=D[mode].sig;e.nl=lane}
+      }
+      if(e.sig&&--e.sig===0){e.l=e.nl;e.cd=D[mode].rc}
+      var tx=LW*(e.l+.5);e.vx=e.vx||0;e.vx+=(Math.max(-D[mode].lat,Math.min(D[mode].lat,(tx-e.x)*.05))-e.vx)*.06;e.x+=e.vx;
+      if(Math.abs(e.x-px)<34&&e.y+30>300-44&&e.y-30<300+82){crash();}
+      if(e.y<-80)en.splice(i,1);
+    }
+    scEl.textContent=Math.floor(dist)+' m';hornEl.textContent=hornCd>0?'Wait '+Math.ceil(hornCd/60)+'s':'HONK';hornEl.disabled=hornCd>0;
+  }
+  draw();requestAnimationFrame(step);
+}
+function crash(why){if(dead)return;
+  dead=true;shake=14;
+  var d=Math.floor(dist);
+  if(d>best){best=d;try{localStorage.setItem('kd_best_'+mode+nt,best)}catch(e){}}
+  bsEl.textContent='Best '+best+' m · '+tag();
+  document.getElementById('om').textContent=why||msgs[Math.floor(Math.random()*msgs.length)];
+  document.getElementById('os').textContent=d+' m survived'+(d>=best&&d>0?' \u2013 new best!':'');
+  document.getElementById('over').classList.remove('hide');
+}
+function draw(){
+  x.save();
+  if(shake>0){x.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake);shake--}
+  x.fillStyle='#2b2f36';x.fillRect(0,0,W,H);
+  x.fillStyle='#3f6b3a';x.fillRect(0,0,6,H);x.fillRect(W-6,0,6,H);
+  x.fillStyle='#e8e4d0';
+  for(var l=1;l<3;l++)for(var y=-80+lines;y<H;y+=80)x.fillRect(LW*l-2,y,4,40);
+  for(var k=0;k<tr.length;k++){var q=tr[k];roundRect(q.x-15,q.y-28,30,56,6,q.c);roundRect(q.x-11,q.y-4,22,12,3,'#1b2a3a');roundRect(q.x-12,q.y+22,7,4,1,'#ff3b3b');roundRect(q.x+5,q.y+22,7,4,1,'#ff3b3b');roundRect(q.x-18,q.y-20,4,12,2,'#111');roundRect(q.x+14,q.y-20,4,12,2,'#111');roundRect(q.x-18,q.y+8,4,12,2,'#111');roundRect(q.x+14,q.y+8,4,12,2,'#111')}
+  for(var i=0;i<en.length;i++){var m=en[i];x.save();x.translate(m.x,m.y);x.rotate((m.vx||0)*.07);x.translate(-m.x,-m.y);drawMusic(m);x.restore()}
+  for(var f=fx.length-1;f>=0;f--){var g=fx[f];g.t--;x.fillStyle='#ffe66d';x.textAlign='center';x.font='bold 20px Trebuchet MS,Verdana,sans-serif';x.fillText('CRUNCH!',g.x,g.y-(50-g.t)*.6);if(g.t<=0)fx.splice(f,1)}x.save();x.translate(px,320);x.rotate(pvx*.05);x.translate(-px,-320);drawLorry(px,300);x.restore();if(honk>0){x.fillStyle='#ffe66d';x.textAlign='center';x.font='bold 22px Trebuchet MS,Verdana,sans-serif';x.fillText('HONK! HONK!',px,236-(40-honk)*.5)}
+  x.restore();
+}
+function begin(){document.getElementById('start').classList.add('hide');document.getElementById('over').classList.add('hide');reset()}
+document.getElementById('go').onclick=begin;
+var mb=document.querySelectorAll('.m[data-m]');
+function setMode(m){mode=m;try{localStorage.setItem('kd_mode',m)}catch(e){}for(var q=0;q<mb.length;q++)mb[q].classList.toggle('on',mb[q].dataset.m===m);document.getElementById('desc').textContent=D[m].d;loadBest()}
+for(var z=0;z<mb.length;z++)mb[z].onclick=function(){setMode(this.dataset.m)};
+document.getElementById('menu').onclick=function(){document.getElementById('over').classList.add('hide');document.getElementById('start').classList.remove('hide')};
+var sm='medium';try{sm=localStorage.getItem('kd_mode')||'medium'}catch(e){}
+try{nt=localStorage.getItem('kd_nt')==='1'}catch(e){}
+var ntb=document.getElementById('nt');function showNt(){ntb.textContent='Traffic: '+(nt?'Off':'On')}
+ntb.onclick=function(){nt=!nt;try{localStorage.setItem('kd_nt',nt?'1':'0')}catch(e){}showNt();loadBest()};
+showNt();setMode(D[sm]?sm:'medium');
+document.getElementById('re').onclick=begin;
+reset();run=false;requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>
